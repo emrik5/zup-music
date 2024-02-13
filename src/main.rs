@@ -15,17 +15,20 @@ pub enum Instruction {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let filepath = "midi/test1.mid";
+    let filepath = "midi/test2.mid";
     let file = fs::read(filepath)?;
     let smf = Smf::parse(&file)?;
     let ppq = match smf.header.timing {
         midly::Timing::Metrical(t) => t.as_int() as f64,
         _ => unimplemented!("PPQ defined with Fps is currently unsupported."),
     };
+    let mut glob_tics_to_secs = 0.0;
+    // 500000 is the default tempo for midi, in case no tempo msg is sent at track start.
+    calc_tick_to_secs(&mut glob_tics_to_secs, 500000, ppq);
     let tracks: Vec<_> = smf
         .tracks
         .iter()
-        .map(|track| parse_track(track, ppq))
+        .map(|track| parse_track(track, &mut glob_tics_to_secs, ppq))
         .collect();
     // println!("{:#?}", tracks);
     for track in tracks {
@@ -34,17 +37,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn parse_track(track: &Track, ppq: f64) -> Vec<Instruction> {
+fn parse_track(track: &Track, tick_to_secs: &mut f64, ppq: f64) -> Vec<Instruction> {
     use midly::MetaMessage;
     use midly::MidiMessage;
     use midly::TrackEventKind as TRK;
 
-    let mut tick_to_secs = 0.0;
-    let mut secs_passed = 0.0;
     let mut instructions: Vec<Instruction> = Vec::with_capacity(track.len());
-
-    // 500000 is the default tempo for midi, in case no tempo msg is sent at track start.
-    calc_tick_to_secs(&mut tick_to_secs, 500000, ppq);
 
     for &event in track {
         match event.kind {
@@ -55,19 +53,16 @@ fn parse_track(track: &Track, ppq: f64) -> Vec<Instruction> {
                     _ => continue,
                 };
                 instructions.push(Instruction::Pause(
-                    event.delta.as_int() as f64 * tick_to_secs,
+                    event.delta.as_int() as f64 * *tick_to_secs,
                 ));
                 instructions.push(instruct);
             }
             TRK::Meta(msg) => match msg {
-                MetaMessage::Tempo(tempo) => {
-                    calc_tick_to_secs(&mut tick_to_secs, tempo.as_int(), ppq)
-                }
+                MetaMessage::Tempo(tempo) => calc_tick_to_secs(tick_to_secs, tempo.as_int(), ppq),
                 _ => {}
             },
             _ => {}
         }
-        secs_passed += event.delta.as_int() as f64 * tick_to_secs;
     }
     instructions
 }
