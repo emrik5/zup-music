@@ -1,10 +1,15 @@
 use std::{error::Error, fs};
 
+use export::export_to_zup;
 use midly::{Smf, Track};
 
-enum Instruction {
+pub mod export;
+
+#[derive(Debug)]
+pub enum Instruction {
     Note(u8),
-    Pause(u8),
+    Pause(f64),
+    NoteOff,
     ChangeWave(u8),
     // Sweep { start: u8, end: u8, len: u32 },
 }
@@ -17,18 +22,26 @@ fn main() -> Result<(), Box<dyn Error>> {
         midly::Timing::Metrical(t) => t.as_int() as f64,
         _ => unimplemented!("PPQ defined with Fps is currently unsupported."),
     };
-    println!("{:#?}", smf);
+    let tracks: Vec<_> = smf
+        .tracks
+        .iter()
+        .map(|track| parse_track(track, ppq))
+        .collect();
+    // println!("{:#?}", tracks);
+    for track in tracks {
+        export_to_zup(&track)?;
+    }
     Ok(())
 }
 
-fn parse_track(track: &Track, ppq: f64) {
+fn parse_track(track: &Track, ppq: f64) -> Vec<Instruction> {
     use midly::MetaMessage;
     use midly::MidiMessage;
     use midly::TrackEventKind as TRK;
 
     let mut tick_to_secs = 0.0;
     let mut secs_passed = 0.0;
-    let mut instructions: Vec<Instruction> = vec![];
+    let mut instructions: Vec<Instruction> = Vec::with_capacity(track.len());
 
     // 500000 is the default tempo for midi, in case no tempo msg is sent at track start.
     calc_tick_to_secs(&mut tick_to_secs, 500000, ppq);
@@ -37,10 +50,13 @@ fn parse_track(track: &Track, ppq: f64) {
         match event.kind {
             TRK::Midi { channel, message } => {
                 let instruct = match message {
-                    MidiMessage::NoteOff { key, vel: _ } => todo!(),
-                    MidiMessage::NoteOn { key, vel: _ } => Instruction::Note(key.as_int()), // det här kommer inte funka (med glob time passed)
+                    MidiMessage::NoteOff { key: _, vel: _ } => Instruction::NoteOff,
+                    MidiMessage::NoteOn { key, vel: _ } => Instruction::Note(key.as_int()),
                     _ => continue,
                 };
+                instructions.push(Instruction::Pause(
+                    event.delta.as_int() as f64 * tick_to_secs,
+                ));
                 instructions.push(instruct);
             }
             TRK::Meta(msg) => match msg {
@@ -53,6 +69,7 @@ fn parse_track(track: &Track, ppq: f64) {
         }
         secs_passed += event.delta.as_int() as f64 * tick_to_secs;
     }
+    instructions
 }
 
 fn calc_tick_to_secs(tick_to_secs: &mut f64, tempo: u32, ppq: f64) {
