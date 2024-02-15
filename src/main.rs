@@ -27,9 +27,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         .iter()
         .map(|track| parse_track(track, ppq))
         .collect();
-    // println!("{:#?}", tracks);
     for track in tracks {
-        export_to_zup(&track)?;
+        export_to_zup("test", &track)?;
     }
     Ok(())
 }
@@ -40,7 +39,6 @@ fn parse_track(track: &Track, ppq: f64) -> Vec<Instruction> {
     use midly::TrackEventKind as TRK;
 
     let mut tick_to_secs = 0.0;
-    let mut secs_passed = 0.0;
     let mut instructions: Vec<Instruction> = Vec::with_capacity(track.len());
 
     // 500000 is the default tempo for midi, in case no tempo msg is sent at track start.
@@ -54,9 +52,12 @@ fn parse_track(track: &Track, ppq: f64) -> Vec<Instruction> {
                     MidiMessage::NoteOn { key, vel: _ } => Instruction::Note(key.as_int()),
                     _ => continue,
                 };
-                instructions.push(Instruction::Pause(
-                    event.delta.as_int() as f64 * tick_to_secs,
-                ));
+                let delta = event.delta.as_int() as f64 * tick_to_secs;
+                if delta == 0.0 {
+                    let _ = instructions.pop();
+                } else {
+                    instructions.push(Instruction::Pause(delta));
+                }
                 instructions.push(instruct);
             }
             TRK::Meta(msg) => match msg {
@@ -67,8 +68,8 @@ fn parse_track(track: &Track, ppq: f64) -> Vec<Instruction> {
             },
             _ => {}
         }
-        secs_passed += event.delta.as_int() as f64 * tick_to_secs;
     }
+    instructions.shrink_to_fit();
     instructions
 }
 
