@@ -7,7 +7,7 @@ use crate::Instruction;
 
 const TUNING: f64 = 440.0;
 
-pub fn export_to_zup(filename: &str, track: &[Instruction]) -> Result<()> {
+pub fn export_to_zup(dirname: &str, filename: &str, track: &[Instruction]) -> Result<()> {
     let output: Vec<String> = track
         .iter()
         .map(|instruction| match &instruction {
@@ -18,8 +18,8 @@ pub fn export_to_zup(filename: &str, track: &[Instruction]) -> Result<()> {
         })
         .collect();
     let output = output.join("\n");
-    let mut file = fs::File::create(format!("export/{}.zup", filename))?;
-    file.write_all(&output.as_bytes())?;
+    let mut file = fs::File::create(format!("export/{}/{}.zup", dirname, filename))?;
+    file.write_all(&[&output.as_bytes(), "\nR".as_bytes()].concat())?;
     Ok(())
 }
 fn midi_to_freq(note: u8) -> f64 {

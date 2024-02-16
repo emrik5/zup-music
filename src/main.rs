@@ -15,7 +15,8 @@ pub enum Instruction {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let filepath = "midi/test2.mid";
+    let filename = "urban_01";
+    let filepath = format!("midi/{filename}.mid");
     let file = fs::read(filepath)?;
     let smf = Smf::parse(&file)?;
     let ppq = match smf.header.timing {
@@ -30,8 +31,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         .iter()
         .map(|track| parse_track(track, &mut glob_tics_to_secs, ppq))
         .collect();
-    for track in tracks {
-        export_to_zup("test", &track)?;
+    fs::create_dir(format!("export/{filename}"))?;
+    for (i, track) in tracks.iter().enumerate() {
+        export_to_zup(&filename, &format!("track{i}"), &track)?;
     }
     Ok(())
 }
@@ -60,7 +62,10 @@ fn parse_track(track: &Track, tick_to_secs: &mut f64, ppq: f64) -> Vec<Instructi
                 instructions.push(instruct);
             }
             TRK::Meta(msg) => match msg {
-                MetaMessage::Tempo(tempo) => calc_tick_to_secs(tick_to_secs, tempo.as_int(), ppq),
+                MetaMessage::Tempo(tempo) => {
+                    println!("Tempo changed!");
+                    calc_tick_to_secs(tick_to_secs, tempo.as_int(), ppq)
+                }
                 _ => {}
             },
             _ => {}
