@@ -66,6 +66,7 @@ fn parse_track(track: &Track, tick_to_secs: &mut f64, ppq: f64) -> Vec<Instructi
             TRK::Meta(msg) => match msg {
                 MetaMessage::Tempo(tempo) => {
                     println!("Tempo changed!");
+                    
                     calc_tick_to_secs(tick_to_secs, tempo.as_int(), ppq)
                 }
                 _ => {}
