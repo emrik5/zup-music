@@ -46,17 +46,19 @@ fn parse_track(track: &Track, tick_to_secs: &mut f64, ppq: f64) -> Vec<Instructi
     let mut instructions: Vec<Instruction> = Vec::with_capacity(track.len());
 
     for &event in track {
+        let mut secs_passed: f64 = 0.0;
         match event.kind {
             TRK::Midi { channel, message } => {
                 let instruct = match message {
-                    MidiMessage::NoteOff { key: _, vel: _ } => Instruction::NoteOff,
-                    MidiMessage::NoteOn { key, vel: _ } => Instruction::Note(key.as_int()),
+                    MidiMessage::NoteOff { .. } => Instruction::NoteOff,
+                    MidiMessage::NoteOn { key, .. } => Instruction::Note(key.as_int()),
                     _ => continue,
                 };
                 let delta = event.delta.as_int() as f64 * *tick_to_secs;
                 if delta == 0.0 {
                     let _ = instructions.pop();
                 } else {
+                    secs_passed += delta;
                     instructions.push(Instruction::Pause(delta));
                 }
                 instructions.push(instruct);
